@@ -39,26 +39,27 @@ function AddTodo() {
       },
       //
       // When adding a *new* object, we have to use the "update" callback to update the cache.
-      // The optimistic response adds the new item into the optimistic cache, but it
-      // has no way to know what queries to update. None of the existing queries have
-      // the new entitiy's id associated with them and no assumtions are made as to which
-      // queries it should be associated with. So we have to add the new entity
-      // appropriately.
+      // The optimistic response adds the new item into the optimistic cache, but the front end
+      // has no way to unambiguously know what cached queries to update with the new item. None of the
+      // existing queries have the new entitiy's id associated with them and no assumtions are made as to which
+      // queries the new item should be associated with. So we have to add the new entity
+      // appropriately with the update callback.
       //
       // In the case, such as here, where we are using the optimisticResponse, this update method is called twice.
-      // The first time for the optimistic data and the second time with the real data,
-      // from the query's results. So, it's important that an optimistic mutation returns the
-      // new entity as part of it's return.
+      // The first time with the optimistic data (with the tmp id) and the second time with the real data,
+      // from the query's mutation results. So, it's important that an optimistic mutation returns the
+      // new entity as part of it's mutation results.
       //
       // If the mutation fails, I think this will only be called once??
       //
       update(cache, { data: { addTodo } }) {
         console.log(`updating: ${JSON.stringify(addTodo)}`);
+
         cache.modify({
           fields: {
             //
-            // This field holds the caches list of to-do items
-            // got the todo query.
+            // This field holds the caches list of to-do items. This is a root query and can be updated
+            // easily with cache.modify.
             //
             todos(existingTodos = []) {
               const newTodoRef = cache.writeFragment({
@@ -88,14 +89,17 @@ function AddTodo() {
             // It's unfortunate, but the only indicator of "type" for both calls is the string options.storeFieldName.
             // There is a lot of discusstion around this as it leads to some kinda hacky code
             // in the cache.update code as you will see. It is often important to know the key values as those
-            // are the variables for our query and often have an impact on what values to put in what list.
+            // are the variables for our query and often have an impact on what values to put in what cached query.
             //
             // Here is more discussion: https://github.com/apollographql/apollo-client/issues/7129
             //
-            // For something simple we can just compare options.storeFieldName with our newly added item, as we do here.
-            // To get a bit fancier, we could write code to parse the options.storeFieldName field. There is some
-            // stability risk here as Apollo could decide to change the format of options.storeFieldName in the future.
-            // For now, however, it's all we got.
+            // For something simple we can just compare options.storeFieldName with our newly added item, as we do below.
+            // To get a bit fancier, we could write code to parse the options.storeFieldName field. That might llok like:
+            //
+            // const args = JSON.parse(options.storeFieldName.replace(`${options.fieldName}:`, ''))
+            //
+            // There is some stability risk here as Apollo could decide to change the format of options.storeFieldName
+            // in the future. For now, however, it's all we got.
             //
             todosByType(existingTodos = [], options) {
               console.log(`options: ${JSON.stringify(options)}`);
@@ -215,8 +219,9 @@ function Todos() {
   // Notice the difference with add vs update. Here, in update, we do not
   // need to update the cache. The mutation call to updateTodo uses the
   // optimisticResponse attribute which updates the optimistic cache item
-  // for the given id. Since the queries (todos, todosByType) already contain those object ids,
-  // where appropriate, we do not need to use the update callback to update the cache.
+  // for the given id. Since the queries (todos, todosByType) already contain (a reference to)
+  // those object ids, where appropriate, we do not need to use the update callback to update the cache.
+  // It's easy for Apollo to unambiguously infer which queries are updated.
   //
   const [updateTodo, { loading: mutationLoading, error: mutationError }] =
     useMutation(UPDATE_TODO, {
@@ -319,12 +324,13 @@ function App() {
     <ApolloProvider client={client}>
       <div>
         <h2>My to-do list</h2>
-        Add items to the to-do list. The server has some delay built in to
-        showcase the effects of optimistic caching. Submitting with type set to
-        "fail" will make the back end throw and exception so you can see the
-        optimistic rollback in the UI.
+        Add items to the to-do list. Type is an arbitrary string. If set to foo
+        or bar, the item will show up in the respectful list below. Submitting
+        with type set to "fail" will make the back end throw an exception so you
+        can see the optimistic rollback in the UI. The server has some
+        artificial delay built in to showcase the effects of optimistic caching.
         <AddTodo />
-        <h3>All to-dos aergaergerhg</h3>
+        <h3>All to-dos</h3>
         <Todos />
         <h3>to-do items with type: foo</h3>
         <TodosByType type="foo" />
