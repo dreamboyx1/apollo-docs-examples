@@ -54,7 +54,9 @@ function AddTodo() {
       //
       update(cache, { data: { addTodo } }) {
         console.log(`updating: ${JSON.stringify(addTodo)}`);
-
+        //
+        // Notice id is not specified here. That means use the ROOT_QUERY.
+        //
         cache.modify({
           fields: {
             //
@@ -75,8 +77,8 @@ function AddTodo() {
               return existingTodos.concat(newTodoRef);
             },
             //
-            // Here we have a root attribute based on a query to todosByType(type: string),
-            // The cache key is actually a string like todosByType({\"type\":\"foo\"}).
+            // Here we have a root attribute with a type argument based on a query to todosByType(type: string).
+            // The cache key is actually a string of the form todosByType({\"type\":\"foo\"}).
             // For different "type" values, we have a different cache key and associated lists of cached values.
             // Since we call todosByType with type:foo and again with type:bar we will actaully have 2 cached lists;
             // one with cache key todosByType({\"type\":\"foo\"}) and the other with cache key todosByType({\"type\":\"bar\"})
@@ -86,10 +88,12 @@ function AddTodo() {
             // options.storeFieldName === "todosByType({\"type\":\"foo\"})" and again with
             // options.storeFieldName === "todosByType({\"type\":\"bar\"})"
             //
-            // It's unfortunate, but the only indicator of "type" for both calls is the string options.storeFieldName.
+            // It is often important to know the key values as those arguments for our query. They
+            // often have an impact on what values to put in what cached query. It's unfortunate, but the
+            // only indicator of "type" for both calls is the string options.storeFieldName.
+            // This includes a serialized version of our arguments, but that requires us to parse the string.
             // There is a lot of discusstion around this as it leads to some kinda hacky code
-            // in the cache.update code as you will see. It is often important to know the key values as those
-            // are the variables for our query and often have an impact on what values to put in what cached query.
+            // in the cache.update code as you will see.
             //
             // Here is more discussion: https://github.com/apollographql/apollo-client/issues/7129
             //
@@ -103,6 +107,7 @@ function AddTodo() {
             //
             todosByType(existingTodos = [], options) {
               console.log(`options: ${JSON.stringify(options)}`);
+              // Is the this cached query for the Todo type we are adding?
               if (
                 options.storeFieldName ===
                 `todosByType({\"type\":\"${addTodo.type}\"})`
