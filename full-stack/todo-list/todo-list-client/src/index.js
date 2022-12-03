@@ -35,15 +35,25 @@ function AddTodo() {
   const [addTodo, { loading: mutationLoading, error: mutationError }] =
     useMutation(ADD_TODO, {
       //
-      // Rick: When adding a new object, we have to use update to update the cache.
-      // In the case where we are using an optimisticResponse, this is called twice.
+      // When adding a new object, we have to use the "update" callback to update the cache.
+      // The optimistic response adds the new item into the optimistic cache, but it
+      // has no way to know what queries to update. None of the existing queries have
+      // the new entitiy's id associated with them and no assumtions are made as to which
+      // it should be associated with. So we have to add the new entity
+      // appropriately.
+      //
+      // In the case, such as here, where we are using the optimisticResponse, this update method is called twice.
       // The first time for the optimistic data and the second time with the real data,
-      // from the queries results.
+      // from the query's results. If the mutation fails, I think this will only be called once??
       //
       update(cache, { data: { addTodo } }) {
         console.log(`updating: ${JSON.stringify(addTodo)}`);
         cache.modify({
           fields: {
+            //
+            // This field holds the caches list of to-do items
+            // got the todo query.
+            //
             todos(existingTodos = []) {
               const newTodoRef = cache.writeFragment({
                 data: addTodo,
@@ -58,18 +68,28 @@ function AddTodo() {
               return existingTodos.concat(newTodoRef);
             },
             //
-            // Rick: Here we have a root attribute based on a query to todosByType(type: string),
-            // The cache key is actually the string todosByType({\"type\":\"test\"}).
-            // For different type values, we have different lists of cached values.
-            // But, here we just have options.storeFieldName === todosByType({\"type\":\"test\"}).
-            // So, how does this work. Well, this field function is actually called
-            // for each permutation of options.storeFieldName.
+            // Here we have a root attribute based on a query to todosByType(type: string),
+            // The cache key is actually a string like todosByType({\"type\":\"foo\"}).
+            // For different "type" values, we have a different cache key and associated lists of cached values.
+            // Since we call todosByType with type:foo and again with type:bar we will actaully have 2 cached lists;
+            // one with cache key todosByType({\"type\":\"foo\"}) and the other with cache key todosByType({\"type\":\"bar\"})
+            // So, how does this work. Well, this field function is actually called once for each permutation
+            // of cache key based on the value of "type". Since our code queries for "foo" and "bar"
+            // and both of those queries have previously cached their results, this function is called twice, once with
+            // options.storeFieldName === "todosByType({\"type\":\"foo\"})" and again with
+            // options.storeFieldName === "todosByType({\"type\":\"bar\"})"
+            //
+            // It's unfortunate, but the only indicator of "type" for both calls is the string options.storeFieldName.
+            // There is a lot of discusstion around this as it leads to some kinda hacky code
+            // in the cache.update code as you will see. It is often important to know the key values as those
+            // are the variables for our query and often have an impact on what values to put in what list.
             //
             // Here is more discussion: https://github.com/apollographql/apollo-client/issues/7129
             //
-            // If we want to target the specific field args, it gets pretty hacky.
-            // One way is to parse storeFieldName. Of for something simple we can just compare.
-            // But then what if the format of storeFieldName changes in the future?
+            // For something simple we can just compare options.storeFieldName with our newly added item, as we do here.
+            // To get a bit fancier, we could write code to parse the options.storeFieldName field. There is some
+            // stability risk here as Apollo could decide to change the format of options.storeFieldName in the future.
+            // For now, however, it's all we got.
             //
             todosByType(existingTodos = [], options) {
               console.log(`options: ${JSON.stringify(options)}`);
@@ -110,9 +130,9 @@ function AddTodo() {
 
             // Optimistically add the Todo to the locally cached
             // list before the server responds. This will only
-            // add a TODO with cache key "Todo:temp-id". No existing queries
-            // will pick that up because no existing queries already contain
-            // the cache key "Todo:temp-id". We have the update function
+            // add a to-do entity with cache key "Todo:temp-id" to the cache.
+            // No existing queries will pick that up because no existing queries already contain
+            // the new cache key "Todo:temp-id". We have the "update" function
             // in the addTodo mutation to do the work of updating the
             // existing queries with the new data.
             //
@@ -184,6 +204,14 @@ const UPDATE_TODO = gql`
 // Component for displaying the current to-do list
 function Todos() {
   const { loading, error, data } = useQuery(GET_TODOS);
+
+  //
+  // Notice the difference with add vs update. Here, in update, we do not
+  // need to update the cache. The mutation call to updateTodo uses the
+  // optimisticResponse attribute which updates the optimistic cache item
+  // for the given id. Since the queries (todos, todosByType) already contain those object ids,
+  // where appropriate, we do not need to use the update callback to update the cache.
+  //
   const [updateTodo, { loading: mutationLoading, error: mutationError }] =
     useMutation(UPDATE_TODO);
 
@@ -251,7 +279,6 @@ function Todos() {
 }
 
 function TodosByType(props) {
-  console.log(`TodosByType: props: ${JSON.stringify(props)}`);
   const { loading, error, data } = useQuery(GET_TODOS_BY_TYPE, {
     variables: { type: props.type ?? "test" },
   });
