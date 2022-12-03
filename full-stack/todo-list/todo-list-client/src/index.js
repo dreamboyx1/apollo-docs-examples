@@ -34,17 +34,23 @@ function AddTodo() {
   let typeInput;
   const [addTodo, { loading: mutationLoading, error: mutationError }] =
     useMutation(ADD_TODO, {
+      onError: (error) => {
+        console.log("error", error);
+      },
       //
-      // When adding a new object, we have to use the "update" callback to update the cache.
+      // When adding a *new* object, we have to use the "update" callback to update the cache.
       // The optimistic response adds the new item into the optimistic cache, but it
       // has no way to know what queries to update. None of the existing queries have
       // the new entitiy's id associated with them and no assumtions are made as to which
-      // it should be associated with. So we have to add the new entity
+      // queries it should be associated with. So we have to add the new entity
       // appropriately.
       //
       // In the case, such as here, where we are using the optimisticResponse, this update method is called twice.
       // The first time for the optimistic data and the second time with the real data,
-      // from the query's results. If the mutation fails, I think this will only be called once??
+      // from the query's results. So, it's important that an optimistic mutation returns the
+      // new entity as part of it's return.
+      //
+      // If the mutation fails, I think this will only be called once??
       //
       update(cache, { data: { addTodo } }) {
         console.log(`updating: ${JSON.stringify(addTodo)}`);
@@ -130,7 +136,7 @@ function AddTodo() {
 
             // Optimistically add the Todo to the locally cached
             // list before the server responds. This will only
-            // add a to-do entity with cache key "Todo:temp-id" to the cache.
+            // add a Todo entity with cache key "Todo:temp-id" to the cache.
             // No existing queries will pick that up because no existing queries already contain
             // the new cache key "Todo:temp-id". We have the "update" function
             // in the addTodo mutation to do the work of updating the
@@ -201,7 +207,7 @@ const UPDATE_TODO = gql`
   }
 `;
 
-// Component for displaying the current to-do list
+// Component for displaying the current Todo list
 function Todos() {
   const { loading, error, data } = useQuery(GET_TODOS);
 
@@ -213,7 +219,11 @@ function Todos() {
   // where appropriate, we do not need to use the update callback to update the cache.
   //
   const [updateTodo, { loading: mutationLoading, error: mutationError }] =
-    useMutation(UPDATE_TODO);
+    useMutation(UPDATE_TODO, {
+      onError: (error) => {
+        console.log("error", error);
+      },
+    });
 
   if (loading) return <p>Loading...</p>;
   if (error) return <p>Error: {error.message}</p>;
@@ -309,12 +319,16 @@ function App() {
     <ApolloProvider client={client}>
       <div>
         <h2>My to-do list</h2>
+        Add items to the to-do list. The server has some delay built in to
+        showcase the effects of optimistic caching. Submitting with type set to
+        "fail" will make the back end throw and exception so you can see the
+        optimistic rollback in the UI.
         <AddTodo />
         <h3>All to-dos aergaergerhg</h3>
         <Todos />
-        <h3>to-do by type: foo</h3>
+        <h3>to-do items with type: foo</h3>
         <TodosByType type="foo" />
-        <h3>to-do by type: bar</h3>
+        <h3>to-do items with type: bar</h3>
         <TodosByType type="bar" />
       </div>
     </ApolloProvider>

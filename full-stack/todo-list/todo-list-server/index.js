@@ -53,6 +53,9 @@ const resolvers = {
   Mutation: {
     addTodo: async (_, { type, description }) => {
       await sleep(5000);
+      if (type === "fail") {
+        throw new Error("failed on type === fail");
+      }
       const id = generate();
       const todo = { id, type, description };
       cache.set(id, todo);
@@ -60,6 +63,9 @@ const resolvers = {
     },
     updateTodo: async (_, { id, type, description }) => {
       await sleep(5000);
+      if (type === "fail") {
+        throw new Error("failed on type === fail");
+      }
       const todo = { id, type, description };
       cache.set(id, todo);
       return todo;
