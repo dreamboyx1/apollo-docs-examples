@@ -32,32 +32,19 @@ const ADD_TODO = gql`
 function AddTodo() {
   let descriptionInput;
   let typeInput;
-  const [addTodo] = useMutation(ADD_TODO, {
-    //
-    // Rick: When adding a new object, we have to use update to update the cache.
-    // In the case where we are using an optimisticResponse, this is called twice.
-    // The first time for the optimistic data and the second time with the real data,
-    // from the queries results.
-    //
-    update(cache, { data: { addTodo } }) {
-      console.log(`updating: ${JSON.stringify(addTodo)}`);
-      cache.modify({
-        fields: {
-          todos(existingTodos = []) {
-            const newTodoRef = cache.writeFragment({
-              data: addTodo,
-              fragment: gql`
-                fragment NewTodo on Todo {
-                  id
-                  type
-                  description
-                }
-              `,
-            });
-            return existingTodos.concat(newTodoRef);
-          },
-          todosByType(existingTodos = []) {
-            if (addTodo.type === "test") {
+  const [addTodo, { loading: mutationLoading, error: mutationError }] =
+    useMutation(ADD_TODO, {
+      //
+      // Rick: When adding a new object, we have to use update to update the cache.
+      // In the case where we are using an optimisticResponse, this is called twice.
+      // The first time for the optimistic data and the second time with the real data,
+      // from the queries results.
+      //
+      update(cache, { data: { addTodo } }) {
+        console.log(`updating: ${JSON.stringify(addTodo)}`);
+        cache.modify({
+          fields: {
+            todos(existingTodos = []) {
               const newTodoRef = cache.writeFragment({
                 data: addTodo,
                 fragment: gql`
@@ -69,14 +56,46 @@ function AddTodo() {
                 `,
               });
               return existingTodos.concat(newTodoRef);
-            } else {
-              return existingTodos;
-            }
+            },
+            //
+            // Rick: Here we have a root attribute based on a query to todosByType(type: string),
+            // The cache key is actually the string todosByType({\"type\":\"test\"}).
+            // For different type values, we have different lists of cached values.
+            // But, here we just have options.storeFieldName === todosByType({\"type\":\"test\"}).
+            // So, how does this work. Well, this field function is actually called
+            // for each permutation of options.storeFieldName.
+            //
+            // Here is more discussion: https://github.com/apollographql/apollo-client/issues/7129
+            //
+            // If we want to target the specific field args, it gets pretty hacky.
+            // One way is to parse storeFieldName. Of for something simple we can just compare.
+            // But then what if the format of storeFieldName changes in the future?
+            //
+            todosByType(existingTodos = [], options) {
+              console.log(`options: ${JSON.stringify(options)}`);
+              if (
+                options.storeFieldName ===
+                `todosByType({\"type\":\"${addTodo.type}\"})`
+              ) {
+                const newTodoRef = cache.writeFragment({
+                  data: addTodo,
+                  fragment: gql`
+                    fragment NewTodo on Todo {
+                      id
+                      type
+                      description
+                    }
+                  `,
+                });
+                return existingTodos.concat(newTodoRef);
+              } else {
+                return existingTodos;
+              }
+            },
           },
-        },
-      });
-    },
-  });
+        });
+      },
+    });
 
   return (
     <div>
@@ -90,7 +109,13 @@ function AddTodo() {
             },
 
             // Optimistically add the Todo to the locally cached
-            // list before the server responds
+            // list before the server responds. This will only
+            // add a TODO with cache key "Todo:temp-id". No existing queries
+            // will pick that up because no existing queries already contain
+            // the cache key "Todo:temp-id". We have the update function
+            // in the addTodo mutation to do the work of updating the
+            // existing queries with the new data.
+            //
             optimisticResponse: {
               addTodo: {
                 __typename: "Todo",
@@ -118,6 +143,10 @@ function AddTodo() {
         />
         <button type="submit">Create item</button>
       </form>
+      <div>
+        {mutationLoading && <p>Loading...</p>}
+        {mutationError && <p>Error: {mutationError.message}</p>}
+      </div>
     </div>
   );
 }
@@ -178,6 +207,17 @@ function Todos() {
                 type: typeInput.value,
                 description: descriptionInput.value,
               },
+              // Optimistically add the Todo to the locally cached
+              // list before the server responds
+
+              optimisticResponse: {
+                updateTodo: {
+                  __typename: "Todo",
+                  id,
+                  type: typeInput.value,
+                  description: descriptionInput.value,
+                },
+              },
             });
             typeInput.value = "";
             descriptionInput.value = "";
@@ -210,9 +250,10 @@ function Todos() {
   );
 }
 
-function TodosByType() {
+function TodosByType(props) {
+  console.log(`TodosByType: props: ${JSON.stringify(props)}`);
   const { loading, error, data } = useQuery(GET_TODOS_BY_TYPE, {
-    variables: { type: "test" },
+    variables: { type: props.type ?? "test" },
   });
   if (loading) return <p>Loading...</p>;
   if (error) return <p>Error: {error.message}</p>;
@@ -244,8 +285,10 @@ function App() {
         <AddTodo />
         <h3>All to-dos aergaergerhg</h3>
         <Todos />
-        <h3>to-do by type: test</h3>
-        <TodosByType />
+        <h3>to-do by type: foo</h3>
+        <TodosByType type="foo" />
+        <h3>to-do by type: bar</h3>
+        <TodosByType type="bar" />
       </div>
     </ApolloProvider>
   );
