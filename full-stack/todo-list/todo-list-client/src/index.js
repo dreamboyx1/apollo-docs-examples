@@ -77,20 +77,20 @@ function AddTodo() {
               return existingTodos.concat(newTodoRef);
             },
             //
-            // Here we have a root attribute with a type argument based on a query to todosByType(type: string).
-            // The cache key is actually a string of the form todosByType({\"type\":\"foo\"}).
+            // Here we have a root field with a type argument based on a query to todosByType(type: string).
+            // The cache key for this field is actually a string of the form todosByType({\"type\":\"foo\"}).
             // For different "type" values, we have a different cache key and associated lists of cached values.
             // Since we call todosByType with type:foo and again with type:bar we will actaully have 2 cached lists;
             // one with cache key todosByType({\"type\":\"foo\"}) and the other with cache key todosByType({\"type\":\"bar\"})
             // So, how does this work. Well, this field function is actually called once for each permutation
-            // of cache key based on the value of "type". Since our code queries for "foo" and "bar"
+            // of cache key based on the value of "type". Since our code queries this field with args for "foo" and "bar"
             // and both of those queries have previously cached their results, this function is called twice, once with
             // options.storeFieldName === "todosByType({\"type\":\"foo\"})" and again with
             // options.storeFieldName === "todosByType({\"type\":\"bar\"})"
             //
-            // It is often important to know the key values as those arguments for our query. They
-            // often have an impact on what values to put in what cached query. It's unfortunate, but the
-            // only indicator of "type" for both calls is the string options.storeFieldName.
+            // It is often important to know field arguments in the cache key for these types of fields. They
+            // often have an impact on what values to put in what cached field, as it does below. It's unfortunate,
+            // but the only indicator of "type" for both cached fields is the string options.storeFieldName.
             // This includes a serialized version of our arguments, but that requires us to parse the string.
             // There is a lot of discusstion around this as it leads to some kinda hacky code
             // in the cache.update code as you will see.
@@ -107,7 +107,7 @@ function AddTodo() {
             //
             todosByType(existingTodos = [], options) {
               console.log(`options: ${JSON.stringify(options)}`);
-              // Is the this cached query for the Todo type we are adding?
+              // Is the this cached field for the Todo type we are adding?
               if (
                 options.storeFieldName ===
                 `todosByType({\"type\":\"${addTodo.type}\"})`
