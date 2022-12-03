@@ -2,21 +2,29 @@ const { ApolloServer, gql } = require("apollo-server");
 const LRU = require("lru-cache");
 const { generate } = require("shortid");
 
+async function sleep(time, cb) {
+  return new Promise((resolve) => {
+    setTimeout(() => resolve(cb?.()), time);
+  });
+}
+
 // Schema definition
 const typeDefs = `
   type Query {
     todos: [Todo]
 		todo(id: String!): Todo
+    todosByType(type: String!): [Todo]
   }
 
 	type Todo {
 		id: String!
+    type: String!
 		description: String!
 	}
 
 	type Mutation {
-		addTodo(description: String!): Todo
-		updateTodo(id: String!, description: String!): Todo
+		addTodo(type: String!, description: String!): Todo
+		updateTodo(id: String!, type: String!, description: String!): Todo
 	}
 `;
 
@@ -28,31 +36,40 @@ const resolvers = {
   Query: {
     todos: () => {
       const todos = [];
-      cache.forEach((description, id) => todos.push({ description, id }));
+      cache.forEach((entry) => todos.push(entry));
+      return todos;
+    },
+    todosByType: (_, { type }) => {
+      const todos = [];
+      cache.forEach((entry) => {
+        if (type === entry.type) todos.push(entry);
+      });
       return todos;
     },
     todo: (_, { id }) => {
-      return { id, description: cache.get(id) };
-    }
+      return cache.get(id);
+    },
   },
   Mutation: {
-    addTodo: (_, { description }) => {
+    addTodo: async (_, { type, description }) => {
+      await sleep(5000);
       const id = generate();
-      const todo = { description, id };
-      cache.set(id, description);
+      const todo = { id, type, description };
+      cache.set(id, todo);
       return todo;
     },
-    updateTodo: (_, { description, id }) => {
-      const todo = { description, id };
-      cache.set(id, description);
+    updateTodo: async (_, { id, type, description }) => {
+      await sleep(5000);
+      const todo = { id, type, description };
+      cache.set(id, todo);
       return todo;
-    }
-  }
+    },
+  },
 };
 
 const server = new ApolloServer({
   typeDefs,
-  resolvers
+  resolvers,
 });
 
 server.listen().then(({ url }) => {
